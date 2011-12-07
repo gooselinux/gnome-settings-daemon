@@ -1,0 +1,13 @@
+diff -up gnome-settings-daemon-2.28.1/plugins/media-keys/gsd-media-keys-window.c.spam gnome-settings-daemon-2.28.1/plugins/media-keys/gsd-media-keys-window.c
+--- gnome-settings-daemon-2.28.1/plugins/media-keys/gsd-media-keys-window.c.spam	2009-12-18 10:32:07.722360259 -0500
++++ gnome-settings-daemon-2.28.1/plugins/media-keys/gsd-media-keys-window.c	2009-12-18 10:33:00.923109059 -0500
+@@ -134,6 +134,9 @@ add_hide_timeout (GsdMediaKeysWindow *wi
+ static void
+ update_window (GsdMediaKeysWindow *window)
+ {
++        if (!gtk_widget_is_drawable (GTK_WIDGET (window)))
++                return;
++
+         remove_hide_timeout (window);
+         add_hide_timeout (window);
+ 

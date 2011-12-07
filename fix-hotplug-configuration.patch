@@ -1,0 +1,45 @@
+From 554cbf282b8473b7d8af93be0a9c7d097ac89b44 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 8 Jun 2010 18:15:25 -0400
+Subject: [PATCH] Enable smart configuration on hotplug
+
+This commit toggles the default on the
+conditional introduced in
+commit 900d3ed34cb691f056e82bf3cbe9c40ebb87c9e9
+
+That commit was fixing a bug with the "Detect Displays"
+button.  Unfortunately, the fix has the side effect of
+breaking user expectations on hotplug.
+
+I believe the original bug can be fixed in a different
+way with some trickery in the gnome-rr code in gnome-desktop.
+
+Regardless, the bug in "Detect Displays" seems like the
+lesser of two evils.
+---
+ plugins/xrandr/gsd-xrandr-manager.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/xrandr/gsd-xrandr-manager.c b/plugins/xrandr/gsd-xrandr-manager.c
+index 7f406b1..aff8d8c 100644
+--- a/plugins/xrandr/gsd-xrandr-manager.c
++++ b/plugins/xrandr/gsd-xrandr-manager.c
+@@ -1367,13 +1367,13 @@ on_randr_event (GnomeRRScreen *screen, gpointer data)
+                  */
+ 
+ 
+-#if 1
++#if 0
+                 if (config_timestamp != priv->last_config_timestamp) {
+                         priv->last_config_timestamp = config_timestamp;
+                         auto_configure_outputs (manager, config_timestamp);
+                 }
+ #else
+-                /* WHY THIS CODE IS DISABLED:
++                /* WHY THIS CODE WAS DISABLED:
+                  *
+                  * The strategy of "on hotplug or unsuspend, restore a
+                  * known-good configuration, and fall back to autoconfiguration"
+-- 
+1.6.5.2
+

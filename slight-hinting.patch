@@ -1,0 +1,12 @@
+diff -up gnome-settings-daemon-2.28.1/data/desktop_gnome_font_rendering.schemas.in.slight-hinting gnome-settings-daemon-2.28.1/data/desktop_gnome_font_rendering.schemas.in
+--- gnome-settings-daemon-2.28.1/data/desktop_gnome_font_rendering.schemas.in.slight-hinting	2009-10-26 17:39:06.045797092 -0400
++++ gnome-settings-daemon-2.28.1/data/desktop_gnome_font_rendering.schemas.in	2009-10-26 17:39:45.649802771 -0400
+@@ -35,7 +35,7 @@
+ 	    <applyto>/desktop/gnome/font_rendering/hinting</applyto>
+             <owner>gnome</owner>
+ 	    <type>string</type>
+-            <default>medium</default>
++            <default>slight</default>
+             <locale name="C">
+ 	        <short>Hinting</short>
+                 <long>

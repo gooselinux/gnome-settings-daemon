@@ -1,0 +1,191 @@
+From 2d0b38af17a307e6b20cba7f814c7c5e8d60c874 Mon Sep 17 00:00:00 2001
+From: Bastien Nocera <hadess@hadess.net>
+Date: Wed, 21 Jul 2010 11:02:56 +0100
+Subject: [PATCH] Use virtual modifier <Super> for the Windows key
+
+By making sure that we convert virtual modifiers to real ones when
+capturing keys with XGrabKey, and vice-versa when checking for
+XEvents.
+
+https://bugzilla.gnome.org/show_bug.cgi?id=623223
+---
+ plugins/common/gsd-keygrab.c |   16 +++++++++++++---
+ plugins/media-keys/acme.h    |    2 +-
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/plugins/common/gsd-keygrab.c b/plugins/common/gsd-keygrab.c
+index 396cb17..0740313 100644
+--- a/plugins/common/gsd-keygrab.c
++++ b/plugins/common/gsd-keygrab.c
+@@ -120,11 +120,15 @@ grab_key_unsafe (Key                 *key,
+         int   bit;
+         int   bits_set_cnt;
+         int   uppervalue;
+-        guint mask;
++        guint cleaned_mask, mask;
+ 
+         setup_modifiers ();
+ 
+-        mask = gsd_ignored_mods & ~key->state & GDK_MODIFIER_MASK;
++        cleaned_mask = gsd_ignored_mods & ~key->state & GDK_MODIFIER_MASK;
++
++        /* XGrabKey requires real modifiers, not virtual ones */
++        egg_keymap_resolve_virtual_modifiers (gdk_keymap_get_default (),
++					      cleaned_mask, &mask);
+ 
+         bit = 0;
+         /* store the indexes of all set bits in mask in the array */
+@@ -226,6 +230,12 @@ match_key (Key *key, XEvent *event)
+ 					     event->xkey.state, group,
+ 					     &keyval, NULL, NULL, &consumed)) {
+ 		guint lower, upper;
++		guint mask;
++
++		/* The Key structure contains virtual modifiers, whereas
++		 * the XEvent will be using the real modifier, so translate those */
++		egg_keymap_resolve_virtual_modifiers (gdk_keymap_get_default (),
++						      key->state, &mask);
+ 
+ 		gdk_keyval_convert_case (keyval, &lower, &upper);
+ 
+@@ -236,7 +246,7 @@ match_key (Key *key, XEvent *event)
+ 			consumed &= ~GDK_SHIFT_MASK;
+ 
+ 		return ((lower == key->keysym || upper == key->keysym)
+-			&& (event->xkey.state & ~consumed & gsd_used_mods) == key->state);
++			&& (event->xkey.state & ~consumed & gsd_used_mods) == mask);
+ 	}
+ 
+ 	/* The key we passed doesn't have a keysym, so try with just the keycode */
+diff --git a/plugins/media-keys/acme.h b/plugins/media-keys/acme.h
+index 3bf8aa3..515a3de 100644
+--- a/plugins/media-keys/acme.h
++++ b/plugins/media-keys/acme.h
+@@ -75,7 +75,7 @@ static struct {
+         { STOP_KEY, GCONF_BINDING_DIR "/stop", NULL, NULL },
+         { PREVIOUS_KEY, GCONF_BINDING_DIR "/previous", NULL, NULL },
+         { NEXT_KEY, GCONF_BINDING_DIR "/next", NULL, NULL },
+-        { VIDEO_OUT_KEY, NULL, "<Mod4>p", NULL },
++        { VIDEO_OUT_KEY, NULL, "<Super>p", NULL },
+         /* Key code of the XF86Display key (Fn-F7 on Thinkpads, Fn-F4 on HP machines, etc.) */
+ 	{ VIDEO_OUT2_KEY, NULL, "XF86Display", NULL },
+ };
+-- 
+1.7.1From 5c9e2b86a3faa631773255772ae1b65cd93653a7 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Fri, 23 Jul 2010 11:42:51 -0400
+Subject: [PATCH] Resolved virtual modifiers from key->state not ignore list
+
+This commit fixes up the grab_key_unsafe to convert the
+virtual modifiers in key->state to be "real" modifiers which
+XGrabKey will accept.
+
+Previously, it was errnoneously passing in the ignored
+modifier list instead of key->state.
+---
+ plugins/common/gsd-keygrab.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/plugins/common/gsd-keygrab.c b/plugins/common/gsd-keygrab.c
+index 0740313..d212ac0 100644
+--- a/plugins/common/gsd-keygrab.c
++++ b/plugins/common/gsd-keygrab.c
+@@ -120,15 +120,15 @@ grab_key_unsafe (Key                 *key,
+         int   bit;
+         int   bits_set_cnt;
+         int   uppervalue;
+-        guint cleaned_mask, mask;
++        guint mask, modifiers;
+ 
+         setup_modifiers ();
+ 
+-        cleaned_mask = gsd_ignored_mods & ~key->state & GDK_MODIFIER_MASK;
++        mask = gsd_ignored_mods & ~key->state & GDK_MODIFIER_MASK;
+ 
+         /* XGrabKey requires real modifiers, not virtual ones */
+         egg_keymap_resolve_virtual_modifiers (gdk_keymap_get_default (),
+-					      cleaned_mask, &mask);
++					      key->state, &modifiers);
+ 
+         bit = 0;
+         /* store the indexes of all set bits in mask in the array */
+@@ -162,7 +162,7 @@ grab_key_unsafe (Key                 *key,
+                                 grab_key_real (*code,
+                                                gdk_screen_get_root_window (screen),
+                                                grab,
+-                                               result | key->state);
++                                               result | modifiers);
+                         }
+                 }
+         }
+-- 
+1.7.1
+
+From 8d3be3eef974ce56ff4e2976b11866b9ca3ccc95 Mon Sep 17 00:00:00 2001
+From: Ray Strode <rstrode@redhat.com>
+Date: Tue, 27 Jul 2010 13:04:56 -0400
+Subject: [PATCH] Don't allow keygrab code to grab unmodified keys
+
+It's far too easy to end up in a situation where the
+modifiers of a global accelerator get stripped off and
+the user is unable to type some vital letter on their
+keyboard.
+
+This commit adds a sanity check as a last line of defense
+to prevent that kind of thing from happening.
+---
+ plugins/common/gsd-keygrab.c |   31 +++++++++++++++++++++++++++++++
+ 1 files changed, 31 insertions(+), 0 deletions(-)
+
+diff --git a/plugins/common/gsd-keygrab.c b/plugins/common/gsd-keygrab.c
+index d212ac0..fa6887a 100644
+--- a/plugins/common/gsd-keygrab.c
++++ b/plugins/common/gsd-keygrab.c
+@@ -41,6 +41,10 @@ static GdkModifierType gsd_ignored_mods = 0;
+  * for these set */
+ static GdkModifierType gsd_used_mods = 0;
+ 
++/* Taken from a comment in XF86keysym.h */
++static guint gsd_unmodified_keysym_min = 0x10080001;
++static guint gsd_unmodified_keysym_max = 0x1008FFFF;
++
+ static void
+ setup_modifiers (void)
+ {
+@@ -130,6 +134,33 @@ grab_key_unsafe (Key                 *key,
+         egg_keymap_resolve_virtual_modifiers (gdk_keymap_get_default (),
+ 					      key->state, &modifiers);
+ 
++        /* If key doesn't have a usable modifier, we don't want
++         * to grab it, since the user might lose a useful key.
++         *
++         * The exception is the XFree86 keys (which are useful to grab without
++         * a modifier).
++         */
++        if ((modifiers & gsd_used_mods) == 0 &&
++            ((key->keysym < gsd_unmodified_keysym_min) ||
++             (key->keysym > gsd_unmodified_keysym_max))) {
++                GString *keycodes;
++
++                keycodes = g_string_new ("");
++                if (key->keycodes != NULL) {
++                        guint *c;
++
++                        for (c = key->keycodes; *c; ++c) {
++                                g_string_printf (keycodes, " %u", *c);
++                        }
++                }
++                g_warning ("Key 0x%x (keycodes: %s)  with state 0x%x (resolved to 0x%x) "
++                           " has no usable modifiers (usable modifiers are 0x%x)",
++                           key->keysym, keycodes->str, key->state, modifiers, gsd_used_mods);
++                g_string_free (keycodes, TRUE);
++
++                return;
++        }
++
+         bit = 0;
+         /* store the indexes of all set bits in mask in the array */
+         for (i = 0; mask; ++i, mask >>= 1) {
+-- 
+1.7.1
+
